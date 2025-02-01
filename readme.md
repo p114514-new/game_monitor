@@ -7,7 +7,7 @@
 1. Install OBS studio if you don't have one.
 
 2. Open OBS webserver settings
-   ![4a44f906-45a2-4f6b-bedc-81f0951c47b1](file:///C:/Users/swx/Pictures/Typedown/4a44f906-45a2-4f6b-bedc-81f0951c47b1.png)
+   ![38eb221a-5602-4b80-a073-754374a6374d](file:///G:/github/game_monitor/assets/38eb221a-5602-4b80-a073-754374a6374d.png)
    
    
 
@@ -17,7 +17,6 @@
 4. Check "Display connections settings" and write your host, port and password into the default params of `obs.py`
    ![d930f332-2a2b-49ac-a345-7af2b0c9cddc](file:///G:/github/game_monitor/assets/d930f332-2a2b-49ac-a345-7af2b0c9cddc.png)
    ![38470080-2078-415b-9346-5ef564283430](file:///G:/github/game_monitor/assets/38470080-2078-415b-9346-5ef564283430.png)
-   
    ![6dfd4502-7d4a-4f39-95e8-46fc4a20a6da](file:///G:/github/game_monitor/assets/6dfd4502-7d4a-4f39-95e8-46fc4a20a6da.png)
 
 5. Create a scene called "screen" and configure its source as screen capture
