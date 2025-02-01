@@ -8,22 +8,22 @@
 
 2. Open OBS webserver settings
    ![4a44f906-45a2-4f6b-bedc-81f0951c47b1](file:///C:/Users/swx/Pictures/Typedown/4a44f906-45a2-4f6b-bedc-81f0951c47b1.png)
+   
+   
 
 3. Enable OBS webserver
-   ![b1d8ab29-7053-4d4a-baf6-4c0533327cb9](file:///C:/Users/swx/Pictures/Typedown/b1d8ab29-7053-4d4a-baf6-4c0533327cb9.png)
+   ![1603a009-64f2-4244-884b-d8d1f148413d](file:///G:/github/game_monitor/assets/1603a009-64f2-4244-884b-d8d1f148413d.png)
 
 4. Check "Display connections settings" and write your host, port and password into the default params of `obs.py`
-   ![0619d518-e695-4f8d-b9f1-95468151b37f](file:///C:/Users/swx/Pictures/Typedown/0619d518-e695-4f8d-b9f1-95468151b37f.png)
-   ![6de99b34-2c7b-45ef-befd-8f154db67ca8](file:///C:/Users/swx/Pictures/Typedown/6de99b34-2c7b-45ef-befd-8f154db67ca8.png)
-   ![439b85ec-2ff0-4a36-aa4b-055491773ac9](file:///C:/Users/swx/Pictures/Typedown/439b85ec-2ff0-4a36-aa4b-055491773ac9.png)
+   ![d930f332-2a2b-49ac-a345-7af2b0c9cddc](file:///G:/github/game_monitor/assets/d930f332-2a2b-49ac-a345-7af2b0c9cddc.png)
+   ![38470080-2078-415b-9346-5ef564283430](file:///G:/github/game_monitor/assets/38470080-2078-415b-9346-5ef564283430.png)
+   
+   ![6dfd4502-7d4a-4f39-95e8-46fc4a20a6da](file:///G:/github/game_monitor/assets/6dfd4502-7d4a-4f39-95e8-46fc4a20a6da.png)
 
 5. Create a scene called "screen" and configure its source as screen capture
-   ![fd524a5c-24b1-4102-87b2-373cc8ad7961](file:///C:/Users/swx/Pictures/Typedown/fd524a5c-24b1-4102-87b2-373cc8ad7961.png)
+   ![c2de43aa-9448-4fb5-a7a3-22e23b329b02](file:///G:/github/game_monitor/assets/c2de43aa-9448-4fb5-a7a3-22e23b329b02.png)
 
 6. Right click the OBS monitor and select "Window Projection" to enable correct full-screen capturing.
-   
-   ![f2403445-378a-4472-a95b-45ed7d7dba87](file:///C:/Users/swx/Pictures/Typedown/f2403445-378a-4472-a95b-45ed7d7dba87.png)
+   ![404c1f66-938d-440f-b58e-59e2ff2a6f5c](file:///G:/github/game_monitor/assets/404c1f66-938d-440f-b58e-59e2ff2a6f5c.png)
 
 7. You are all done! Before you start your game, run `obs.py` in your IDE or `python obs.py` in terminal to start capturing. Videos will be stored in ./recordings, mouse and keyboard logs will be stored in the same directory as obs.py.
-
-
