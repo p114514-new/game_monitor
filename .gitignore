@@ -4,3 +4,5 @@
 ./obsws_python
 ./venv
 ./idea
+./action_logs
+./__pycache__
