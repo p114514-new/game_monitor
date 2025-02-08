@@ -1,0 +1,6 @@
+*.mkv
+*.jsonl
+./recordings
+./obsws_python
+./venv
+./idea
