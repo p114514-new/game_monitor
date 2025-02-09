@@ -6,3 +6,5 @@
 ./idea
 ./action_logs
 ./__pycache__
+./dist
+./build
