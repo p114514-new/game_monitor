@@ -1,18 +1,17 @@
+__all__ = ['record_mouse_events', 'record_mouse_position', 
+           'start_recording', 'save_log', 'init_keyboard_listener']
+
 import datetime
 import time
 import os
 import threading
 import json
-from collections import defaultdict
-import keyboard  # for keyboard events
+import keyboard
 import win32api
 import win32con
 import win32gui
 import ctypes
 from ctypes import windll
-import win32com.client
-import pythoncom
-import config  # 添加这行到文件开头
 
 # Initialize data structure for logging
 log_data = {
@@ -30,8 +29,8 @@ recording_start_time = None
 log_filename = None
 
 # Add screen info as global variables
-SCREEN_WIDTH = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)  # 2560
-SCREEN_HEIGHT = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)  # 1440
+SCREEN_WIDTH = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+SCREEN_HEIGHT = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
 
 def get_relative_timestamp():
     """Get timestamp relative to recording start time"""
@@ -40,6 +39,7 @@ def get_relative_timestamp():
     return time.time() - recording_start_time
 
 def on_key_event(event):
+    """Handle keyboard events"""
     event_type = "press" if event.event_type == "down" else "release"
     event_data = {
         "type": event_type,
@@ -93,17 +93,12 @@ def get_mouse_delta():
     
     return dx, dy
 
-def record_mouse_position():
-    """Record mouse movement using GetAsyncKeyState"""
-    import win32api
-    import win32con
-    
+def record_mouse_position(mouse_boundary_threshold, fps=60, debug=True, print_interval=100):
+    """Record mouse movement with configurable parameters"""
     print("Starting mouse movement tracking...")
     
-    # 使用配置中的边界阈值
-    BOUNDARY_THRESHOLD = config.MOUSE_BOUNDARY_THRESHOLD
+    BOUNDARY_THRESHOLD = mouse_boundary_threshold
     
-    # 定义重置区域（重置到离当前位置较近的安全位置）
     def get_safe_reset_position(current_x, current_y):
         """根据当前位置计算最近的安全重置位置"""
         if current_x < BOUNDARY_THRESHOLD:
@@ -157,8 +152,8 @@ def record_mouse_position():
                 log_data["mouse_positions"].append(position_data)
                 
                 # 使用配置中的打印间隔
-                if len(log_data["mouse_positions"]) % config.PRINT_INTERVAL == 0:
-                    if config.DEBUG:
+                if len(log_data["mouse_positions"]) % print_interval == 0:
+                    if debug:
                         print(f"Mouse delta: dx={dx}, dy={dy}")
                 
                 # 只在非常接近边界时重置位置
@@ -178,7 +173,7 @@ def record_mouse_position():
                     last_x = current_x
                     last_y = current_y
             
-            time.sleep(1/config.RECORDING_FPS)  # 使用配置中的FPS
+            time.sleep(1/fps)  # 使用传入的 fps 参数，而不是 global_config
             
         except Exception as e:
             print(f"Error tracking mouse movement: {e}")
@@ -195,121 +190,124 @@ def record_mouse_events():
     last_middle = win32api.GetKeyState(win32con.VK_MBUTTON)
     
     while True:
-        # Check mouse buttons
-        left = win32api.GetKeyState(win32con.VK_LBUTTON)
-        right = win32api.GetKeyState(win32con.VK_RBUTTON)
-        middle = win32api.GetKeyState(win32con.VK_MBUTTON)
-        
-        x, y = get_mouse_position()
-        
-        # Left button
-        if left != last_left:
-            pressed = left < 0
-            event = {
-                "type": "click",
-                "action": "press" if pressed else "release",
-                "button": "Button.left",
-                "position": {"x": x, "y": y},
-                "timestamp": get_relative_timestamp()
-            }
-            log_data["mouse_events"].append(event)
-            last_left = left
+        try:
+            # Check mouse buttons
+            left = win32api.GetKeyState(win32con.VK_LBUTTON)
+            right = win32api.GetKeyState(win32con.VK_RBUTTON)
+            middle = win32api.GetKeyState(win32con.VK_MBUTTON)
             
-        # Right button
-        if right != last_right:
-            pressed = right < 0
-            event = {
-                "type": "click",
-                "action": "press" if pressed else "release",
-                "button": "Button.right",
-                "position": {"x": x, "y": y},
-                "timestamp": get_relative_timestamp()
-            }
-            log_data["mouse_events"].append(event)
-            last_right = right
+            x, y = win32api.GetCursorPos()
             
-        # Middle button
-        if middle != last_middle:
-            pressed = middle < 0
-            event = {
-                "type": "click",
-                "action": "press" if pressed else "release",
-                "button": "Button.middle",
-                "position": {"x": x, "y": y},
-                "timestamp": get_relative_timestamp()
-            }
-            log_data["mouse_events"].append(event)
-            last_middle = middle
-        
-        time.sleep(0.001)  # Small sleep to prevent high CPU usage
+            # Left button
+            if left != last_left:
+                pressed = left < 0
+                event = {
+                    "type": "click",
+                    "action": "press" if pressed else "release",
+                    "button": "Button.left",
+                    "position": {"x": x, "y": y},
+                    "timestamp": get_relative_timestamp()
+                }
+                log_data["mouse_events"].append(event)
+                last_left = left
+                
+            # Right button
+            if right != last_right:
+                pressed = right < 0
+                event = {
+                    "type": "click",
+                    "action": "press" if pressed else "release",
+                    "button": "Button.right",
+                    "position": {"x": x, "y": y},
+                    "timestamp": get_relative_timestamp()
+                }
+                log_data["mouse_events"].append(event)
+                last_right = right
+                
+            # Middle button
+            if middle != last_middle:
+                pressed = middle < 0
+                event = {
+                    "type": "click",
+                    "action": "press" if pressed else "release",
+                    "button": "Button.middle",
+                    "position": {"x": x, "y": y},
+                    "timestamp": get_relative_timestamp()
+                }
+                log_data["mouse_events"].append(event)
+                last_middle = middle
+            
+            time.sleep(0.001)  # Small sleep to prevent high CPU usage
+            
+        except Exception as e:
+            print(f"Error recording mouse events: {e}")
+            time.sleep(0.1)
 
-def save_log(video_filename=None):
-    """Save log as JSONL by appending to existing file"""
+def save_log(logs_dir, video_filename=None, debug=True):
+    """Save log with configurable directory"""
     global log_filename
     current_time = get_relative_timestamp()
     
-    # 使用配置中的路径
-    if video_filename and not log_filename:
-        base_name = os.path.basename(video_filename)
-        log_filename = os.path.join(config.LOGS_DIR, 
-            base_name.replace(".mp4", "_log.jsonl"))
+    try:
+        if video_filename and not log_filename:
+            log_basename = os.path.basename(video_filename) + "_log.jsonl"
+            log_filename = os.path.join(logs_dir, log_basename)
+            
+            os.makedirs(logs_dir, exist_ok=True)
+            
+            with open(log_filename, "w", encoding='utf-8') as f:
+                screen_info = {
+                    "type": "screen_info",
+                    "width": SCREEN_WIDTH,
+                    "height": SCREEN_HEIGHT
+                }
+                f.write(json.dumps(screen_info) + "\n")
         
-        # 在第一次保存时添加屏幕信息
-        with open(log_filename, "a", encoding='utf-8') as f:
-            screen_info = {
-                "type": "screen_info",
-                "width": SCREEN_WIDTH,
-                "height": SCREEN_HEIGHT
-            }
-            f.write(json.dumps(screen_info) + "\n")
-    
-    # Prepare the log entry
-    log_entry = {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "relative_timestamp": current_time,
-        "keyboard_events": log_data["keyboard_events"],
-        "mouse_events": log_data["mouse_events"],
-        "mouse_positions": log_data["mouse_positions"]
-    }
-    
-    # Calculate statistics
-    stats = {
-        "keyboard_events_count": len(log_data["keyboard_events"]),
-        "mouse_clicks_count": len([e for e in log_data["mouse_events"] if e["type"] == "click"]),
-        "mouse_positions_count": len(log_data["mouse_positions"])
-    }
-    log_entry["stats"] = stats
-    
-    if video_filename:
-        log_entry["video_file"] = video_filename
-        log_entry["recording_duration"] = current_time
-    
-    # Only save if we have a log filename
-    if log_filename:
-        with open(log_filename, "a", encoding='utf-8') as f:
-            f.write(json.dumps(log_entry) + "\n")
+        if log_filename:
+            with open(log_filename, "a", encoding='utf-8') as f:
+                log_entry = {
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "relative_timestamp": current_time,
+                    "keyboard_events": log_data["keyboard_events"],
+                    "mouse_events": log_data["mouse_events"],
+                    "mouse_positions": log_data["mouse_positions"]
+                }
+                f.write(json.dumps(log_entry) + "\n")
+            
+            if debug:
+                print(f"\nLog statistics at {current_time:.1f}s:")
+                print(f"  Keyboard events: {len(log_data['keyboard_events'])}")
+                print(f"  Mouse clicks: {len([e for e in log_data['mouse_events'] if e['type'] == 'click'])}")
+                print(f"  Mouse positions: {len(log_data['mouse_positions'])}")
+                print(f"Log appended to {log_filename}")
         
-        if config.DEBUG:
-            print(f"\nLog statistics at {current_time:.1f}s:")
-            print(f"  Keyboard events: {stats['keyboard_events_count']}")
-            print(f"  Mouse clicks: {stats['mouse_clicks_count']}")
-            print(f"  Mouse positions: {stats['mouse_positions_count']}")
-            print(f"Log appended to {log_filename}")
-    else:
-        print("Warning: No log file specified yet, data not saved")
-    
-    # Clear the current logs after saving
-    log_data["keyboard_events"].clear()
-    log_data["mouse_events"].clear()
-    log_data["mouse_positions"].clear()
+        # 清除当前日志
+        log_data["keyboard_events"].clear()
+        log_data["mouse_events"].clear()
+        log_data["mouse_positions"].clear()
+        
+    except Exception as e:
+        print(f"Error saving log: {e}")
+
+def init_keyboard_listener():
+    """Initialize keyboard listener"""
+    try:
+        keyboard.hook(on_key_event)
+        # 不要调用 keyboard.wait()，因为它会阻塞线程
+    except Exception as e:
+        print(f"Error initializing keyboard listener: {e}")
 
 def start_recording():
     """Initialize recording state"""
-    global recording_start_time
+    global recording_start_time, log_filename
     recording_start_time = time.time()
+    log_filename = None  # 重置日志文件名
+    
+    # 初始化键盘监听
+    init_keyboard_listener()
 
 def start_listener():
-    """Start keyboard listener using keyboard library"""
+    """Start keyboard listener"""
     try:
         keyboard.hook(on_key_event)
         keyboard.wait()  # Keep the listener running
@@ -317,16 +315,7 @@ def start_listener():
         print(f"Error in keyboard listener: {e}")
 
 if __name__ == '__main__':
-    # First install required packages if not already installed
-    try:
-        import pywin32
-    except ImportError:
-        print("Installing required packages...")
-        os.system("pip install pywin32")
-        print("Please restart the script")
-        exit(1)
-
-    # Start mouse position recording thread (60 FPS)
+    # Start mouse position recording thread
     mouse_position_thread = threading.Thread(target=record_mouse_position)
     mouse_position_thread.daemon = True
     mouse_position_thread.start()

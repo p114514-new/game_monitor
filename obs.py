@@ -1,45 +1,94 @@
 from obswebsocket import obsws
-import obsws_python.obsws_python as obs
+import obsws_python as obs
 import time
 import os
 import datetime
 import threading
-from main import (
-    start_listener, 
-    record_mouse_events,  # 新的鼠标事件记录函数
-    record_mouse_position,  # 鼠标位置记录函数
-    save_log, 
-    start_recording as start_input_recording
-)
-import config
+
+# 直接定义需要的函数，而不是从 main 导入
+def start_input_recording():
+    """Start recording keyboard and mouse inputs"""
+    global recording
+    recording = True
+
+def save_log(video_filename=None):
+    """Save the current log data"""
+    # 实现日志保存逻辑
+    pass
 
 class OBSRecorder:
-    def __init__(self, host="localhost", port=4455, password=None, output_path="recordings"):
+    def __init__(self, host, port, password, scene, recordings_dir, logs_dir, 
+                 mouse_boundary_threshold=10, debug=True, print_interval=100, fps=60):
         self.host = host
         self.port = port
         self.password = password
-        self.output_path = output_path
+        self.scene = scene
+        self.recordings_dir = recordings_dir
+        self.logs_dir = logs_dir
+        self.mouse_boundary_threshold = mouse_boundary_threshold
+        self.debug = debug
+        self.print_interval = print_interval
+        self.fps = fps
+        
         self.client = None
         self.recording = False
+        self.log_save_thread = None
         
-        # 确保录制目录存在
-        os.makedirs(self.output_path, exist_ok=True)
-        os.makedirs(config.RECORDINGS_DIR, exist_ok=True)
-        os.makedirs(config.LOGS_DIR, exist_ok=True)
-    
+        # 确保目录存在
+        os.makedirs(recordings_dir, exist_ok=True)
+        os.makedirs(logs_dir, exist_ok=True)
+        
+        # 初始化输入记录器
+        from main import (record_mouse_events, 
+                        record_mouse_position,
+                        start_recording as start_input_tracking)
+        
+        # 启动鼠标事件记录线程
+        self.mouse_events_thread = threading.Thread(target=record_mouse_events)
+        self.mouse_events_thread.daemon = True
+        self.mouse_events_thread.start()
+        
+        # 启动鼠标位置记录线程，传入所有配置参数
+        self.mouse_position_thread = threading.Thread(
+            target=lambda: record_mouse_position(
+                self.mouse_boundary_threshold,
+                self.fps,
+                self.debug,
+                self.print_interval
+            )
+        )
+        self.mouse_position_thread.daemon = True
+        self.mouse_position_thread.start()
+
     def connect(self):
         """Connect to OBS WebSocket"""
         try:
             self.client = obs.ReqClient(
-                host=config.OBS_HOST,
-                port=config.OBS_PORT,
-                password=config.OBS_PASSWORD
+                host=self.host,
+                port=self.port,
+                password=self.password
             )
+            
+            # 只在有场景名称时尝试设置场景
+            if self.scene:
+                try:
+                    self.client.set_current_program_scene(self.scene)
+                except Exception as e:
+                    print(f"Warning: Failed to set scene: {e}")
+                    # 继续执行，不中断连接
+                
             print("Successfully connected to OBS")
+            return True
+            
         except Exception as e:
             print(f"Failed to connect to OBS: {e}")
             return False
-        return True
+    
+    def set_current_program_scene(self, scene_name):
+        """设置当前场景"""
+        if self.client and scene_name:
+            self.client.set_current_program_scene(scene_name)
+            self.scene = scene_name
     
     def _start_input_tracking(self):
         """Start tracking keyboard and mouse inputs"""
@@ -52,29 +101,38 @@ class OBSRecorder:
                 return None, None
         
         try:
-            # Generate filename with timestamp
-            timestamp = datetime.datetime.now().strftime(config.RECORDING_NAME_FORMAT)
-            recording_path = os.path.join(config.RECORDINGS_DIR, timestamp)
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            recording_path = os.path.join(self.recordings_dir, f"game_recording_{timestamp}.mp4")
             
-            # 确保录制文件的目录存在
-            os.makedirs(os.path.dirname(recording_path), exist_ok=True)
+            os.makedirs(self.recordings_dir, exist_ok=True)
             
-            # Set up and start OBS recording
             try:
+                self.client.set_record_directory(self.recordings_dir)
                 self.client.start_record()
                 self.recording = True
+                
+                # 启动所有输入记录
+                from main import start_recording, save_log, record_mouse_events, record_mouse_position
+                start_recording()  # 这里会初始化键盘监听
+                
+                # 第一次保存日志，创建新文件
+                save_log(self.logs_dir, timestamp, self.debug)
+                
+                # 启动定期保存日志的线程
+                def save_log_periodically():
+                    while self.recording:
+                        save_log(self.logs_dir, timestamp, self.debug)
+                        time.sleep(10)
+                
+                self.log_save_thread = threading.Thread(target=save_log_periodically)
+                self.log_save_thread.daemon = True
+                self.log_save_thread.start()
+                
+                return recording_path, timestamp
+                
             except Exception as e:
                 print(f"Error starting OBS recording: {e}")
                 return None, None
-            
-            # Save first log entry with video filename to initialize the log file
-            save_log(timestamp)
-            
-            # Start input tracking threads
-            self._start_input_tracking()
-            
-            print(f"Started recording to {recording_path}")
-            return recording_path, timestamp
             
         except Exception as e:
             print(f"Error starting recording: {e}")
@@ -86,10 +144,21 @@ class OBSRecorder:
             return False
         
         try:
+            # 停止 OBS 录制
             self.client.stop_record()
             self.recording = False
+            
+            # 等待日志保存线程结束
+            if self.log_save_thread and self.log_save_thread.is_alive():
+                self.log_save_thread.join(timeout=2)
+            
+            # 最后保存一次日志
+            from main import save_log
+            save_log(self.logs_dir)
+            
             print("Recording stopped")
             return True
+            
         except Exception as e:
             print(f"Error stopping recording: {e}")
             return False
