@@ -1,203 +1,155 @@
-import pynput.keyboard
-import datetime
-import time
-import os
-import threading
-import json
-from collections import defaultdict
+﻿import threading
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, ttk
 
-# Remove KEYS_TO_RECORD set since we'll record all keys
-# Initialize data structure for logging
-log_data = {
-    "keyboard_events": [],
-    "mouse_events": [],
-    "mouse_positions": []
-}
+from obs_control import OBSRecorder
 
-# Mouse recording
-mouse_log = ""
+LOG_INTERVAL_SECONDS = 10
 
-# Keyboard recording
-currently_pressed = set()  # Keep track of currently pressed keys
-last_mouse_pos = (0, 0)
-mouse_position_lock = threading.Lock()
 
-# Add a new variable to track recording start time
-recording_start_time = None
+class GameMonitorUI:
+    """UI shell that drives the legacy OBS + key/mouse recorder logic."""
 
-# Add a global variable for log filename
-log_filename = None
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.root.title("Game Monitor")
+        self.root.geometry("600x420")
+        self.root.minsize(560, 380)
+        self.root.configure(bg="#eef2f7")
 
-def get_relative_timestamp():
-    """Get timestamp relative to recording start time"""
-    if recording_start_time is None:
-        return 0.0
-    return time.time() - recording_start_time
+        style = ttk.Style()
+        style.theme_use("clam")
+        accent = "#2563eb"
+        style.configure("Card.TFrame", background="#ffffff")
+        style.configure("Card.TLabel", background="#ffffff", foreground="#0f172a", font=("Segoe UI", 10))
+        style.configure("Title.TLabel", background="#eef2f7", foreground="#0f172a", font=("Segoe UI Semibold", 16))
+        style.configure("SubTitle.TLabel", background="#eef2f7", foreground="#475569", font=("Segoe UI", 10))
+        style.configure("Status.TLabel", background="#ffffff", foreground="#0f172a", font=("Segoe UI", 10))
+        style.configure("TButton", font=("Segoe UI Semibold", 10), padding=8)
+        style.configure("Accent.TButton", background=accent, foreground="#ffffff", relief="flat")
+        style.map("Accent.TButton", background=[["active", "#1d4ed8"]], foreground=[["active", "#ffffff"]])
+        style.configure("Danger.TButton", background="#ef4444", foreground="#ffffff", relief="flat")
+        style.map("Danger.TButton", background=[["active", "#dc2626"]], foreground=[["active", "#ffffff"]])
 
-def on_press(key):
-    # Record all keys
-    currently_pressed.add(str(key))
-    pressed_chars = sorted(list(currently_pressed))
-    event = {
-        "type": "press",
-        "keys": pressed_chars,
-        "timestamp": get_relative_timestamp()
-    }
-    log_data["keyboard_events"].append(event)
+        self.host_var = tk.StringVar(value="localhost")
+        self.port_var = tk.IntVar(value=4455)
+        self.password_var = tk.StringVar(value="")
+        self.scene_var = tk.StringVar(value="screen")
+        self.output_dir_var = tk.StringVar(value=str(Path("recordings").resolve()))
 
-def on_release(key):
-    key_str = str(key)
-    if key_str in currently_pressed:
-        currently_pressed.remove(key_str)
-        event = {
-            "type": "release",
-            "key": key_str,
-            "timestamp": get_relative_timestamp()
-        }
-        log_data["keyboard_events"].append(event)
-    if key == pynput.keyboard.Key.esc:
-        return False
+        self.recorder: OBSRecorder | None = None
+        self.recording_active = False
 
-def on_click(x, y, button, pressed):
-    event = {
-        "type": "click",
-        "action": "press" if pressed else "release",
-        "button": str(button),
-        "position": {"x": x, "y": y},
-        "timestamp": get_relative_timestamp()
-    }
-    log_data["mouse_events"].append(event)
+        self._build_ui()
 
-def on_move(x, y):
-    global last_mouse_pos
-    with mouse_position_lock:
-        last_mouse_pos = (x, y)
+    def _build_ui(self) -> None:
+        header = ttk.Frame(self.root, style="Card.TFrame", padding=14)
+        header.pack(fill="x", padx=14, pady=(12, 8))
+        ttk.Label(header, text="Game Monitor", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(
+            header,
+            text=f"OBS + keyboard/mouse capture · autosave every {LOG_INTERVAL_SECONDS}s",
+            style="SubTitle.TLabel",
+        ).pack(anchor="w", pady=(4, 0))
 
-def on_scroll(x, y, dx, dy):
-    event = {
-        "type": "scroll",
-        "delta": {"dx": dx, "dy": dy},
-        "position": {"x": x, "y": y},
-        "timestamp": get_relative_timestamp()
-    }
-    log_data["mouse_events"].append(event)
+        frame = ttk.Frame(self.root, style="Card.TFrame", padding=14)
+        frame.pack(fill="both", expand=True, padx=14, pady=(0, 12))
 
-def record_mouse_position():
-    frame_interval = 1.0 / 60  # 60 FPS
-    while True:
-        start_time = time.time()
-        
-        with mouse_position_lock:
-            x, y = last_mouse_pos
-        
-        position_data = {
-            "position": {"x": x, "y": y},
-            "timestamp": get_relative_timestamp()
-        }
-        log_data["mouse_positions"].append(position_data)
-        
-        elapsed = time.time() - start_time
-        sleep_time = max(0, frame_interval - elapsed)
-        time.sleep(sleep_time)
+        grid = [
+            ("Host", self.host_var),
+            ("Port", self.port_var),
+            ("Password", self.password_var, {"show": "*"}),
+            ("Scene", self.scene_var),
+            ("Output dir", self.output_dir_var),
+        ]
+        for idx, (label, var, *opt) in enumerate(grid):
+            ttk.Label(frame, text=label, style="Card.TLabel").grid(row=idx, column=0, sticky="w", pady=4)
+            entry = ttk.Entry(frame, textvariable=var, width=34, **(opt[0] if opt else {}))
+            entry.grid(row=idx, column=1, sticky="we", pady=4)
+            if label == "Output dir":
+                ttk.Button(frame, text="Browse", command=self._choose_dir).grid(row=idx, column=2, padx=6)
 
-def save_log(video_filename=None):
-    """Save log as JSONL by appending to existing file"""
-    global log_filename
-    current_time = get_relative_timestamp()
-    
-    # Set log filename if not set yet
-    if video_filename and not log_filename:
-        log_filename = video_filename.replace(".mp4", "_log.jsonl")
-    
-    # Prepare the log entry
-    log_entry = {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "relative_timestamp": current_time,
-        "keyboard_events": log_data["keyboard_events"],
-        "mouse_events": log_data["mouse_events"],
-        "mouse_positions": log_data["mouse_positions"]
-    }
-    
-    # Calculate statistics
-    stats = {
-        "keyboard_events_count": len(log_data["keyboard_events"]),
-        "mouse_clicks_count": len([e for e in log_data["mouse_events"] if e["type"] == "click"]),
-        "mouse_scrolls_count": len([e for e in log_data["mouse_events"] if e["type"] == "scroll"]),
-        "mouse_positions_count": len(log_data["mouse_positions"])
-    }
-    log_entry["stats"] = stats
-    
-    if video_filename:
-        log_entry["video_file"] = video_filename
-        log_entry["recording_duration"] = current_time
-    
-    # Only save if we have a log filename
-    if log_filename:
-        # Append the log entry to the file
-        with open(log_filename, "a", encoding='utf-8') as f:
-            f.write(json.dumps(log_entry) + "\n")
-        
-        # Print statistics
-        print(f"\nLog statistics at {current_time:.1f}s:")
-        print(f"  Keyboard events: {stats['keyboard_events_count']}")
-        print(f"  Mouse clicks: {stats['mouse_clicks_count']}")
-        print(f"  Mouse scrolls: {stats['mouse_scrolls_count']}")
-        print(f"  Mouse positions: {stats['mouse_positions_count']}")
-        print(f"Log appended to {log_filename}")
-    else:
-        print("Warning: No log file specified yet, data not saved")
-    
-    # Clear the current logs after saving
-    log_data["keyboard_events"].clear()
-    log_data["mouse_events"].clear()
-    log_data["mouse_positions"].clear()
+        btn_row = ttk.Frame(frame, style="Card.TFrame")
+        btn_row.grid(row=len(grid), column=0, columnspan=3, pady=(14, 6), sticky="w")
+        self.start_btn = ttk.Button(btn_row, text="Start Recording", command=self._start, style="Accent.TButton")
+        self.stop_btn = ttk.Button(btn_row, text="Stop Recording", command=self._stop, state="disabled", style="Danger.TButton")
+        self.start_btn.pack(side="left", padx=(0, 8))
+        self.stop_btn.pack(side="left")
 
-def start_recording():
-    """Initialize recording state"""
-    global recording_start_time
-    recording_start_time = time.time()
+        self.status_var = tk.StringVar(value="Idle")
+        ttk.Label(frame, textvariable=self.status_var, style="Status.TLabel").grid(
+            row=len(grid) + 1, column=0, columnspan=3, sticky="w", pady=(8, 0)
+        )
 
-# Run the listener in a separate thread for background operation
-def start_listener():
-    with pynput.keyboard.Listener(
-            on_press=on_press,
-            on_release=on_release) as listener:
-        listener.join()
+        frame.columnconfigure(1, weight=1)
 
-# Start mouse listener in a separate thread
-def start_mouse_listener():
-    with pynput.mouse.Listener(
-            on_click=on_click,
-            on_move=on_move,
-            on_scroll=on_scroll) as listener:
-        listener.join()
+    def _choose_dir(self) -> None:
+        chosen = filedialog.askdirectory(initialdir=self.output_dir_var.get() or ".")
+        if chosen:
+            self.output_dir_var.set(chosen)
 
-if __name__ == '__main__':
-    # Start mouse position recording thread (60 FPS)
-    mouse_position_thread = threading.Thread(target=record_mouse_position)
-    mouse_position_thread.daemon = True
-    mouse_position_thread.start()
+    def _start(self) -> None:
+        if self.recording_active:
+            return
+        self.start_btn.state(["disabled"])
+        self.stop_btn.state(["!disabled"])
+        self.status_var.set("Starting...")
+        threading.Thread(target=self._start_worker, daemon=True).start()
 
-    # Start mouse event listener thread
-    mouse_listener_thread = threading.Thread(target=start_mouse_listener)
-    mouse_listener_thread.daemon = True
-    mouse_listener_thread.start()
+    def _start_worker(self) -> None:
+        try:
+            self.recorder = OBSRecorder(
+                host=self.host_var.get(),
+                port=int(self.port_var.get()),
+                password=self.password_var.get(),
+                scene=self.scene_var.get(),
+                output_dir=self.output_dir_var.get(),
+                log_interval_seconds=LOG_INTERVAL_SECONDS,
+            )
+            self.recorder.connect()
+            full_path, _ = self.recorder.start_recording()
+            if not full_path:
+                raise RuntimeError("OBS is already recording.")
+            self.recording_active = True
+            self._set_status(f"Recording -> {full_path} | Log every {LOG_INTERVAL_SECONDS}s")
+        except Exception as exc:
+            self._set_status(f"Failed to start: {exc}")
+            self.root.after(0, lambda: self.start_btn.state(["!disabled"]))
+            self.root.after(0, lambda: self.stop_btn.state(["disabled"]))
 
-    # Start keyboard listener thread
-    listener_thread = threading.Thread(target=start_listener)
-    listener_thread.daemon = True
-    listener_thread.start()
+    def _stop(self) -> None:
+        if not self.recording_active:
+            return
+        self.start_btn.state(["disabled"])
+        self.stop_btn.state(["disabled"])
+        self.status_var.set("Stopping...")
+        threading.Thread(target=self._stop_worker, daemon=True).start()
 
-    try:
-        while True:
-            time.sleep(60)  # Save the log every minute
-            save_log()
+    def _stop_worker(self) -> None:
+        final_path = None
+        try:
+            if self.recorder:
+                final_path = self.recorder.stop_recording()
+                self.recorder.disconnect()
+        finally:
+            self.recording_active = False
+            if final_path:
+                self._set_status(f"Stopped. Saved: {final_path}")
+            else:
+                self._set_status("Stopped.")
+            self.root.after(0, lambda: self.start_btn.state(["!disabled"]))
+            self.root.after(0, lambda: self.stop_btn.state(["disabled"]))
 
-    except KeyboardInterrupt:
-        print("Recording stopped.")
-        save_log()
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        save_log()
-    finally:
-        print("Exiting...")
+    def _set_status(self, text: str) -> None:
+        self.root.after(0, lambda: self.status_var.set(text))
+
+
+def main() -> None:
+    root = tk.Tk()
+    GameMonitorUI(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
