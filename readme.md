@@ -1,9 +1,5 @@
 ﻿# Game Monitor
 
-# Game Monitor - record screen, keyboard, and mouse movements at the same time
-
-
-
 ### How to use
 
 1. Install OBS studio if you don't have one.
