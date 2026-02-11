@@ -22,7 +22,7 @@
    ![recordings](./assets/recordings.png)
 
 7. **First left click the upper part (recording preview screen) of the obs panel. (should have a red edge if selected)** Then right click the same part (the preview screen) and select "Render as source resolution" (使用此源的尺寸作为输出分辨率) to enable correct full-screen capturing.
-   ![404c1f66-938d-440f-b58e-59e2ff2a6f5c](./assets/404c1f66-938d-440f-b58e-59e2ff2a6f5c.png)
+   ![obs_resolution](./assets/obs_resolution.png)
 
 8. Set video format to mkv, video encoder to NVIDIA NVENC HEVC, bitrate to 8000 Kbps, fps to 30
    ![188a8460f94a62adb92de72d7ba59f55](./assets/188a8460f94a62adb92de72d7ba59f55.png)
