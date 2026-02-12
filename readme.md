@@ -25,9 +25,10 @@
    ![obs_resolution](./assets/obs_resolution.png)
 
 8. Set video format to mkv, video encoder to NVIDIA NVENC HEVC, bitrate to 8000 Kbps, fps to 30
+   ![obs_settings](./assets/obs_settings.png)
    ![188a8460f94a62adb92de72d7ba59f55](./assets/188a8460f94a62adb92de72d7ba59f55.png)
    ![322ce2fb9c64597b3dc89f57eafc68af](./assets/322ce2fb9c64597b3dc89f57eafc68af.png)
    ![84bd341e59587877e3491dd0b15c0352](./assets/84bd341e59587877e3491dd0b15c0352.png)
 
-9. You are all done! Before you start your game, **make sure obs is running in the background**, and click the blue 'start recording' button to start capturing. This will automatically start the obs. A red dot will appear on the obs icon if the setup is successful. The red 'stop recording' button stops all recordings, including the obs.
+10. You are all done! Before you start your game, **make sure obs is running in the background**, and click the blue 'start recording' button to start capturing. This will automatically start the obs. A red dot will appear on the obs icon if the setup is successful. The red 'stop recording' button stops all recordings, including the obs.
 
