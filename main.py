@@ -1,4 +1,4 @@
-﻿import threading
+import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, ttk
