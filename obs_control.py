@@ -1,5 +1,6 @@
 import datetime
 import threading
+import time
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -56,11 +57,11 @@ class OBSRecorder:
                 self.client.set_current_program_scene(self.scene)
             except Exception:
                 pass
+        self._ensure_cfr_30()
         self.client.start_record()
         self.recording_active = True
 
-        # Resolve actual output path from OBS (might be MKV based on OBS settings)
-        status = self.client.get_record_status()
+        start_perf, start_wall, status = self._wait_for_recording_active()
         resolved_path = self._resolve_output_path(status, filename_hint)
         filename = Path(resolved_path).name
         full_path = str(resolved_path)
@@ -68,7 +69,7 @@ class OBSRecorder:
         # Start input capture with legacy logic
         legacy.start_recording()
         legacy.save_log(full_path)  # initialize log file bound to this video path
-        legacy.start_input_threads()
+        legacy.start_input_threads(start_perf=start_perf, start_wall=start_wall)
 
         self.current_output_path = Path(full_path)
         self._start_log_thread()
@@ -89,6 +90,7 @@ class OBSRecorder:
                 self.current_output_path = self._resolve_output_path(status, None)
         finally:
             self._stop_log_thread()
+            legacy.stop_input_threads()
             legacy.save_log()
             self.recording_active = False
             print("Stopped recording")
@@ -137,3 +139,34 @@ class OBSRecorder:
         if fallback_stem:
             return self.output_dir / f"{fallback_stem}.mkv"
         return self.output_dir / "recording.mkv"
+
+    def _wait_for_recording_active(self) -> Tuple[float, float, object]:
+        start = time.monotonic()
+        last_status = self.client.get_record_status() if self.client else None
+        while time.monotonic() - start < 3.0:
+            status = self.client.get_record_status() if self.client else None
+            last_status = status
+            if status and getattr(status, "output_active", False):
+                return time.perf_counter(), time.time(), status
+            time.sleep(0.02)
+        return time.perf_counter(), time.time(), last_status
+
+    def _ensure_cfr_30(self) -> None:
+        if not self.client:
+            return
+        set_fn = getattr(self.client, "set_video_settings", None)
+        get_fn = getattr(self.client, "get_video_settings", None)
+        if not set_fn or not get_fn:
+            return
+        try:
+            settings = get_fn()
+            fps_num = getattr(settings, "fps_numerator", None) or getattr(settings, "fpsNumerator", None)
+            fps_den = getattr(settings, "fps_denominator", None) or getattr(settings, "fpsDenominator", None)
+            if fps_num == 30 and fps_den in (1, None):
+                return
+            try:
+                set_fn(fps_numerator=30, fps_denominator=1)
+            except TypeError:
+                set_fn(fpsNumerator=30, fpsDenominator=1)
+        except Exception:
+            return
